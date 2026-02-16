@@ -16,13 +16,18 @@ REQUIRED_SENSOR_KEYS = (
     "pir",
     "dht11_temp_c",
     "dht11_humidity",
-    "lm393",
+    "lm393_raw",
+    "lm393_lux",
 )
 
 DHT11_TEMP_MIN_C = 0.0
 DHT11_TEMP_MAX_C = 50.0
 DHT11_HUMIDITY_MIN = 20.0
 DHT11_HUMIDITY_MAX = 90.0
+LM393_RAW_MIN = 0
+LM393_RAW_MAX = 1023
+LM393_LUX_MIN = 0.0
+LM393_LUX_MAX = 10000.0
 
 
 class SerialReader:
@@ -117,8 +122,11 @@ def parse_serial_line(line: str) -> dict[str, float | int]:
     if normalized["pir"] not in (0, 1):
         raise ValueError("pir must be 0 or 1")
 
-    if normalized["lm393"] not in (0, 1):
-        raise ValueError("lm393 must be 0 or 1")
+    if not LM393_RAW_MIN <= float(normalized["lm393_raw"]) <= LM393_RAW_MAX:
+        raise ValueError(f"lm393_raw out of range [{LM393_RAW_MIN}, {LM393_RAW_MAX}]")
+
+    if not LM393_LUX_MIN <= float(normalized["lm393_lux"]) <= LM393_LUX_MAX:
+        raise ValueError(f"lm393_lux out of range [{LM393_LUX_MIN}, {LM393_LUX_MAX}]")
 
     if not DHT11_TEMP_MIN_C <= float(normalized["dht11_temp_c"]) <= DHT11_TEMP_MAX_C:
         raise ValueError(f"dht11_temp_c out of range [{DHT11_TEMP_MIN_C}, {DHT11_TEMP_MAX_C}]")

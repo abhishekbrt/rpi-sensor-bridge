@@ -10,7 +10,8 @@ class PayloadMappingTests(unittest.TestCase):
             "pir": 0,
             "dht11_temp_c": 27.0,
             "dht11_humidity": 58.0,
-            "lm393": 1,
+            "lm393_raw": 632,
+            "lm393_lux": 381.0,
         }
         ts = datetime(2026, 2, 15, 9, 30, tzinfo=timezone.utc)
 

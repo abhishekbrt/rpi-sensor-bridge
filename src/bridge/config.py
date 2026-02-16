@@ -22,8 +22,16 @@ class Config:
     mqtt_sensor_topic: str
     mqtt_command_topic: str
     mqtt_command_ack_topic: str
+    mqtt_device_command_topic: str
+    mqtt_device_command_ack_topic: str
     device_id: str
     command_log_path: str
+    automation_enabled: bool = True
+    automation_window_seconds: int = 120
+    auto_fan_on_temp_c: float = 29.0
+    auto_fan_off_temp_c: float = 27.5
+    auto_light_on_lux: float = 300.0
+    auto_light_off_lux: float = 380.0
     mqtt_keepalive: int = 60
     serial_timeout: float = 1.0
 
@@ -48,6 +56,18 @@ def _read_float(env: Mapping[str, str], key: str, default: float) -> float:
         raise ValueError(f"Environment variable {key} must be a float") from exc
 
 
+def _read_bool(env: Mapping[str, str], key: str, default: bool) -> bool:
+    raw = env.get(key)
+    if raw in (None, ""):
+        return default
+    normalized = raw.strip().lower()
+    if normalized in {"1", "true", "yes", "on"}:
+        return True
+    if normalized in {"0", "false", "no", "off"}:
+        return False
+    raise ValueError(f"Environment variable {key} must be a boolean")
+
+
 def from_env(env: Mapping[str, str] | None = None) -> Config:
     load_dotenv()
     source = dict(os.environ) if env is None else dict(env)
@@ -62,8 +82,16 @@ def from_env(env: Mapping[str, str] | None = None) -> Config:
         mqtt_sensor_topic=source.get("MQTT_SENSOR_TOPIC", "home/pi/sensors/all"),
         mqtt_command_topic=source.get("MQTT_COMMAND_TOPIC", "home/pi/commands/switch"),
         mqtt_command_ack_topic=source.get("MQTT_COMMAND_ACK_TOPIC", "home/pi/commands/switch/ack"),
+        mqtt_device_command_topic=source.get("MQTT_DEVICE_COMMAND_TOPIC", "home/pi/commands/device"),
+        mqtt_device_command_ack_topic=source.get("MQTT_DEVICE_COMMAND_ACK_TOPIC", "home/pi/commands/device/ack"),
         device_id=source.get("DEVICE_ID", "rpi-01"),
         command_log_path=source.get("COMMAND_LOG_PATH", "/var/log/rpi-sensor-bridge/commands.jsonl"),
+        automation_enabled=_read_bool(source, "AUTOMATION_ENABLE", True),
+        automation_window_seconds=_read_int(source, "AUTOMATION_WINDOW_SECONDS", 120),
+        auto_fan_on_temp_c=_read_float(source, "AUTO_FAN_ON_TEMP_C", 29.0),
+        auto_fan_off_temp_c=_read_float(source, "AUTO_FAN_OFF_TEMP_C", 27.5),
+        auto_light_on_lux=_read_float(source, "AUTO_LIGHT_ON_LUX", 300.0),
+        auto_light_off_lux=_read_float(source, "AUTO_LIGHT_OFF_LUX", 380.0),
         mqtt_keepalive=_read_int(source, "MQTT_KEEPALIVE", 60),
         serial_timeout=_read_float(source, "SERIAL_TIMEOUT", 1.0),
     )

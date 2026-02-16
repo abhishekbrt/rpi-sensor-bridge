@@ -61,6 +61,8 @@ class MQTTFlowTests(unittest.TestCase):
             mqtt_sensor_topic="home/pi/sensors/all",
             mqtt_command_topic="home/pi/commands/switch",
             mqtt_command_ack_topic="home/pi/commands/switch/ack",
+            mqtt_device_command_topic="home/pi/commands/device",
+            mqtt_device_command_ack_topic="home/pi/commands/device/ack",
             device_id="rpi-01",
             command_log_path="/tmp/commands.jsonl",
             mqtt_keepalive=60,
@@ -75,6 +77,7 @@ class MQTTFlowTests(unittest.TestCase):
         bridge.connect()
 
         self.assertIn(("home/pi/commands/switch", 1), fake_client.subscriptions)
+        self.assertIn(("home/pi/commands/device", 1), fake_client.subscriptions)
 
         bridge.publish_sensor({"sample": True})
         sensor_publications = [x for x in fake_client.published if x[0] == "home/pi/sensors/all"]
@@ -88,6 +91,96 @@ class MQTTFlowTests(unittest.TestCase):
         ack_publications = [x for x in fake_client.published if x[0] == "home/pi/commands/switch/ack"]
         self.assertEqual(len(ack_publications), 1)
         self.assertEqual(json.loads(ack_publications[0][1])["status"], "accepted")
+
+    def test_mqtt_bridge_routes_device_ack_to_device_ack_topic(self) -> None:
+        fake_client = FakeMQTTClient()
+
+        config = Config(
+            serial_port="/dev/ttyACM0",
+            serial_baud=9600,
+            mqtt_host="127.0.0.1",
+            mqtt_port=1883,
+            mqtt_username="",
+            mqtt_password="",
+            mqtt_sensor_topic="home/pi/sensors/all",
+            mqtt_command_topic="home/pi/commands/switch",
+            mqtt_command_ack_topic="home/pi/commands/switch/ack",
+            mqtt_device_command_topic="home/pi/commands/device",
+            mqtt_device_command_ack_topic="home/pi/commands/device/ack",
+            device_id="rpi-01",
+            command_log_path="/tmp/commands.jsonl",
+            mqtt_keepalive=60,
+            serial_timeout=1.0,
+        )
+
+        def on_command(_payload: str, topic: str):
+            return {
+                "status": "accepted",
+                "requestId": "req-1",
+                "deviceId": "fan_01",
+                "power": "on",
+                "_ack_topic": "home/pi/commands/device/ack" if topic.endswith("/device") else None,
+            }
+
+        bridge = MQTTBridgeClient(config, on_command=on_command, mqtt_factory=lambda: fake_client)
+        bridge.connect()
+
+        msg = type(
+            "Msg",
+            (),
+            {
+                "topic": "home/pi/commands/device",
+                "payload": b'{"requestId":"req-1","deviceId":"fan_01","power":"on"}',
+            },
+        )
+        fake_client.on_message(fake_client, None, msg)
+
+        ack_publications = [x for x in fake_client.published if x[0] == "home/pi/commands/device/ack"]
+        self.assertEqual(len(ack_publications), 1)
+        ack_payload = json.loads(ack_publications[0][1])
+        self.assertEqual(ack_payload["requestId"], "req-1")
+
+    def test_mqtt_bridge_publishes_device_command_to_device_topic(self) -> None:
+        fake_client = FakeMQTTClient()
+
+        config = Config(
+            serial_port="/dev/ttyACM0",
+            serial_baud=9600,
+            mqtt_host="127.0.0.1",
+            mqtt_port=1883,
+            mqtt_username="",
+            mqtt_password="",
+            mqtt_sensor_topic="home/pi/sensors/all",
+            mqtt_command_topic="home/pi/commands/switch",
+            mqtt_command_ack_topic="home/pi/commands/switch/ack",
+            mqtt_device_command_topic="home/pi/commands/device",
+            mqtt_device_command_ack_topic="home/pi/commands/device/ack",
+            device_id="rpi-01",
+            command_log_path="/tmp/commands.jsonl",
+            mqtt_keepalive=60,
+            serial_timeout=1.0,
+        )
+
+        bridge = MQTTBridgeClient(config, on_command=lambda _payload, _topic: {}, mqtt_factory=lambda: fake_client)
+        bridge.connect()
+
+        ok = bridge.publish_device_command(
+            {
+                "requestId": "auto-1",
+                "deviceId": "fan_01",
+                "power": "on",
+                "source": "automation",
+                "sentAt": "2026-02-16T12:00:00+00:00",
+            }
+        )
+        self.assertTrue(ok)
+
+        publications = [x for x in fake_client.published if x[0] == "home/pi/commands/device"]
+        self.assertEqual(len(publications), 1)
+        body = json.loads(publications[0][1])
+        self.assertEqual(body["deviceId"], "fan_01")
+        self.assertEqual(body["power"], "on")
+        self.assertEqual(body["source"], "automation")
 
 
 if __name__ == "__main__":

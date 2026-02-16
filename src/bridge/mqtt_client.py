@@ -50,7 +50,12 @@ class MQTTBridgeClient:
             LOGGER.error("MQTT connection failed with rc=%s", rc)
             return
         client.subscribe(self._config.mqtt_command_topic, qos=1)
-        LOGGER.info("Subscribed to command topic %s", self._config.mqtt_command_topic)
+        client.subscribe(self._config.mqtt_device_command_topic, qos=1)
+        LOGGER.info(
+            "Subscribed to command topics %s and %s",
+            self._config.mqtt_command_topic,
+            self._config.mqtt_device_command_topic,
+        )
 
     def _handle_message(self, _client: Any, _userdata: Any, msg: Any) -> None:
         try:
@@ -60,7 +65,8 @@ class MQTTBridgeClient:
 
         ack = self._on_command(payload, msg.topic)
         if ack is not None:
-            self.publish_ack(ack)
+            ack_topic = ack.pop("_ack_topic", None) if isinstance(ack, dict) else None
+            self.publish_ack(ack, topic=ack_topic)
 
     def publish_sensor(self, payload: dict[str, Any]) -> bool:
         if self._client is None:
@@ -74,12 +80,24 @@ class MQTTBridgeClient:
         )
         return getattr(result, "rc", 1) == 0
 
-    def publish_ack(self, payload: dict[str, Any]) -> bool:
+    def publish_ack(self, payload: dict[str, Any], topic: str | None = None) -> bool:
         if self._client is None:
             raise RuntimeError("MQTT client is not connected")
 
         result = self._client.publish(
-            self._config.mqtt_command_ack_topic,
+            topic or self._config.mqtt_command_ack_topic,
+            json.dumps(payload, separators=(",", ":")),
+            qos=1,
+            retain=False,
+        )
+        return getattr(result, "rc", 1) == 0
+
+    def publish_device_command(self, payload: dict[str, Any]) -> bool:
+        if self._client is None:
+            raise RuntimeError("MQTT client is not connected")
+
+        result = self._client.publish(
+            self._config.mqtt_device_command_topic,
             json.dumps(payload, separators=(",", ":")),
             qos=1,
             retain=False,
